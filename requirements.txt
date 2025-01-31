@@ -1,0 +1,9 @@
+streamlit>=1.36.0
+streamlit-option-menu==0.3.12
+langchain>=0.3.12
+langchain-core>=0.3.25
+langchain-openai>=0.2.0
+openai
+langsmith
+python-dotenv
+streamlit-antd-components
