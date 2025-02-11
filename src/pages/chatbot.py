@@ -1,38 +1,61 @@
 import streamlit as st
-from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_openai import ChatOpenAI
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-import json
 import os
 import openai
 from langsmith import wrappers, traceable
 from auth import verify_login
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
-# グローバルなクライアント初期化
-if "openai_client" not in st.session_state:
-    # 環境変数設定
-    os.environ["LANGCHAIN_TRACING_V2"] = "true"
-    os.environ["LANGCHAIN_API_KEY"] = st.secrets["api_keys"]["langsmith"]
-    os.environ["LANGCHAIN_PROJECT"] = "qa-support-system"
-    os.environ["OPENAI_API_KEY"] = st.secrets["api_keys"]["openai"]
-    
-    # OpenAIクライアントの初期化（一度だけ）
-    st.session_state.openai_client = wrappers.wrap_openai(openai.Client())
 
-def init_chat_page():
-    """チャットページの初期化"""
-    # ページ設定
-    st.set_page_config(page_title="QA事業部 専属チャットボット", page_icon=":speech_balloon:", layout="wide")
-    
-# システムプロンプトの読み込み
+def init_openai_client():
+    """OpenAIクライアントの初期化"""
+    try:
+        # 環境変数設定
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_API_KEY"] = st.secrets["api_keys"]["langsmith"]
+        os.environ["LANGCHAIN_PROJECT"] = "qa-support-system"
+        os.environ["OPENAI_API_KEY"] = st.secrets["api_keys"]["openai"]
+
+        # OpenAIクライアントの初期化
+        return wrappers.wrap_openai(openai.Client())
+    except Exception as e:
+        st.error(f"OpenAIクライアントの初期化中にエラーが発生しました: {str(e)}")
+        return None
+
+
 def load_system_prompts():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    prompts_path = os.path.join(current_dir, "prompts", "system_prompts.json")
-    with open(prompts_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    """システムプロンプトの読み込み"""
+    prompts = {}
+    try:
+        # 機能分類プロンプトの読み込み
+        function_classification_path = os.path.join("src", "prompts", "function_classification.md")
+        with open(function_classification_path, "r", encoding="utf-8") as f:
+            prompts["機能分類"] = {"content": f.read(), "type": "markdown"}
 
-#@traceable
+        # テスト分類プロンプトの読み込み
+        test_classification_path = os.path.join("src", "prompts", "test_classification.md")
+        with open(test_classification_path, "r", encoding="utf-8") as f:
+            prompts["テスト分類"] = {"content": f.read(), "type": "markdown"}
+
+        # 評価シート作成プロンプトの読み込み
+        evaluation_sheet_path = os.path.join("src", "prompts", "evaluation_sheet.md")
+        with open(evaluation_sheet_path, "r", encoding="utf-8") as f:
+            prompts["評価シート作成"] = {"content": f.read(), "type": "markdown"}
+
+        return prompts
+    except FileNotFoundError:
+        st.error("システムプロンプトファイルが見つかりません。")
+        st.info("管理者に連絡してください。")
+        return {}
+    except Exception as e:
+        st.error(f"システムプロンプトの読み込み中にエラーが発生しました: {str(e)}")
+        st.info("管理者に連絡してください。")
+        return {}
+
+
+# @traceable
 def _get_chat_completion(messages: list, temperature: float = 0) -> str:
     """OpenAI APIを使用してチャット応答を取得（非ストリーミング）"""
     try:
@@ -44,24 +67,42 @@ def _get_chat_completion(messages: list, temperature: float = 0) -> str:
         return f"エラーが発生しました: {str(e)}"
 
 
-#@traceable
-def prepare_messages(system_prompt: str, user_input: str, chat_history: list) -> list:
-    """チャットメッセージの準備"""
-    return [
-        {"role": "system", "content": system_prompt},
-        *[{"role": msg["role"], "content": msg["content"]} for msg in chat_history[-5:]],
-        {"role": "user", "content": user_input},
-    ]
-
 def get_chat_response(system_prompt: str, user_input: str, message_placeholder, chat_history: list) -> str:
     """ストリーミング対応のチャット応答を取得"""
     try:
-        messages = prepare_messages(system_prompt, user_input, chat_history)
+        # OpenAIクライアントの確認
+        if "openai_client" not in st.session_state or st.session_state.openai_client is None:
+            st.session_state.openai_client = init_openai_client()
+            if st.session_state.openai_client is None:
+                return "OpenAIクライアントの初期化に失敗しました。"
+
+        # メッセージの準備
+        messages = [
+            SystemMessage(content=system_prompt),
+            *[
+                HumanMessage(content=msg["content"]) if msg["role"] == "user" else AIMessage(content=msg["content"])
+                for msg in chat_history[-5:]
+            ],
+            HumanMessage(content=user_input),
+        ]
+
+        # OpenAI APIに送信するためのメッセージ形式に変換
+        api_messages = [
+            {
+                "role": (
+                    "system"
+                    if isinstance(msg, SystemMessage)
+                    else "user" if isinstance(msg, HumanMessage) else "assistant"
+                ),
+                "content": msg.content,
+            }
+            for msg in messages
+        ]
 
         # ストリーミングレスポンスの処理
         response_text = ""
         for chunk in st.session_state.openai_client.chat.completions.create(
-            messages=messages,
+            messages=api_messages,
             model="gpt-4o-mini",
             temperature=0,
             stream=True,
@@ -80,35 +121,46 @@ def get_chat_response(system_prompt: str, user_input: str, message_placeholder, 
         st.error(error_msg)
         return error_msg
 
-def main():
-    # チャットページの初期化
-    client = init_chat_page()
-    if client is None:
+
+def show_chatbot_page():
+    """チャットボット画面を表示"""
+    # 現在のページがチャットボットでない場合は即座に終了
+    if st.session_state.page != "chatbot":
         return
-    
-    st.title("QA Support System")
 
-    # システムプロンプトの読み込み
-    SYSTEM_PROMPTS = load_system_prompts()
+    # ログインチェック
+    if not st.session_state.get("password_correct", False):
+        st.error("ログインが必要です")
+        st.stop()
 
-    # サイドバー
-    with st.sidebar:
-        st.title("Options")
-        selected_category = st.selectbox("カテゴリを選択してください", options=list(SYSTEM_PROMPTS.keys()))
+    # OpenAIクライアントの初期化
+    if "openai_client" not in st.session_state:
+        st.session_state.openai_client = init_openai_client()
 
-        if st.button("Logout"):
-           del st.session_state["password_correct"]
-           del st.session_state["logged_in_email"]
-           st.rerun()
+    # メインコンテンツ
+    st.title("QA Chatbot System")
 
-        # 会話履歴クリアボタン
-        if st.button("会話履歴をクリア"):
-            st.session_state.messages = []
-            st.rerun()
+    # システムプロンプトの読み込みとセッション状態への保存
+    if "SYSTEM_PROMPTS" not in st.session_state:
+        st.session_state.SYSTEM_PROMPTS = load_system_prompts()
 
     # チャット履歴の初期化
     if "messages" not in st.session_state:
         st.session_state.messages = []
+
+    # カテゴリ選択の説明を追加
+    st.markdown(
+        """
+    ### 使い方
+    1. サイドバーからカテゴリを選択してください
+    2. 質問を入力してください
+    
+    #### カテゴリの説明
+    - 機能分類：音楽アプリの機能について質問できます
+    - テスト分類：テストの分類方法について質問できます
+    - 評価シート作成：テストケースの作成方法について質問できます
+    """
+    )
 
     # チャット履歴の表示
     for message in st.session_state.messages:
@@ -123,35 +175,26 @@ def main():
             st.markdown(user_input)
 
         try:
-            # システムプロンプトの準備
-            system_prompt = SYSTEM_PROMPTS[selected_category]["base_instruction"]
-            if selected_category == "機能分類":
-                system_prompt += f"\n\n分類体系:\n{json.dumps(SYSTEM_PROMPTS[selected_category]['classification_structure'], ensure_ascii=False, indent=2)}"
-                system_prompt += f"\n\n機能ツリー:\n{json.dumps(SYSTEM_PROMPTS[selected_category]['function_tree'], ensure_ascii=False, indent=2)}"
-                system_prompt += "\n\n以下は回答例です：\n"
-                for example in SYSTEM_PROMPTS[selected_category]["few_shot_examples"].values():
-                    system_prompt += f"\n質問：{example['question']}\n\n回答：\n{example['answer']}\n"
-            elif selected_category == "テスト分類":
-                system_prompt += f"\n\nテスト分類詳��:\n{json.dumps(SYSTEM_PROMPTS[selected_category]['test_classification'], ensure_ascii=False, indent=2)}"
-                system_prompt += "\n\n以下は回答例です：\n"
-                for example in SYSTEM_PROMPTS[selected_category]["few_shot_examples"].values():
-                    system_prompt += f"\n質問：{example['question']}\n\n回答：\n{example['answer']}\n"
-            elif selected_category == "評価シート":
-                system_prompt += f"\n\n評価シートの文脈:\n{json.dumps(SYSTEM_PROMPTS[selected_category]['context'], ensure_ascii=False, indent=2)}"
-                system_prompt += f"\n\n評価項目:\n{json.dumps(SYSTEM_PROMPTS[selected_category]['items'], ensure_ascii=False, indent=2)}"
-                system_prompt += f"\n\n評価シート例:\n{json.dumps(SYSTEM_PROMPTS[selected_category]['Example'], ensure_ascii=False, indent=2)}"
+            selected_category = st.session_state.get("chatbot_category")
+            if selected_category:
+                # システムプロンプトの準備
+                system_prompt = st.session_state.SYSTEM_PROMPTS[selected_category]["content"]
 
-            # アシスタントのメッセージ枠を準備
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                # ストリーミングで応答を取得・表示（チャット履歴も渡す）
-                response = get_chat_response(system_prompt, user_input, message_placeholder, st.session_state.messages)
-                # チャット履歴に追加
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                # アシスタントのメッセージ枠を準備
+                with st.chat_message("assistant"):
+                    message_placeholder = st.empty()
+                    # ストリーミングで応答を取得・表示（チャット履歴も渡す）
+                    response = get_chat_response(
+                        system_prompt, user_input, message_placeholder, st.session_state.messages
+                    )
+                    # チャット履歴に追加
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+            else:
+                st.error("サイドバーからカテゴリを選択してください")
 
         except Exception as e:
             st.error(f"エラーが発生しました: {str(e)}")
 
 
 if __name__ == "__main__":
-    main()
+    show_chatbot_page()

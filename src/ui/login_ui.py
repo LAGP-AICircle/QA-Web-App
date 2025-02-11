@@ -1,12 +1,35 @@
 import streamlit as st
 from auth import verify_login
 
+
 def show_login_page():
     """ログイン画面を表示"""
-    # タイトル表示
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        st.title("QA事業部 サポートシステム")
+    # カスタムCSSでタイトルを中央配置
+    st.markdown(
+        """
+        <style>
+        .title-container {
+            margin: 0;
+            padding: 3rem 0;
+            text-align: center;
+        }
+        .title-container h1 {
+            color: #0066cc;
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 0;
+            padding: 0;
+        }
+        </style>
+        <div class="title-container">
+            <h1>QA事業部 SupportSystem</h1>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # スペースを追加してフォームとの間隔を確保
+    st.markdown("<br><br>", unsafe_allow_html=True)
 
     # フォームを中央に配置するためのカラムレイアウト
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -29,10 +52,10 @@ def show_login_page():
                     st.rerun()
                 else:
                     st.error("メールアドレスまたはパスワードが正しくありません")
-        
+
         # 区切り線を追加
         st.markdown("---")
-        
+
         # 新規登録ボタンをログインフォームの下に配置
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
