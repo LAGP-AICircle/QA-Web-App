@@ -4,6 +4,7 @@ from ui.signup_ui import show_signup_page
 from components.sidebar import show_sidebar
 from pages.home import show_home_page
 from pages.chatbot import show_chatbot_page
+from pages.qa_drill import show_qa_drill_page
 
 
 def init_session_state():
@@ -48,6 +49,8 @@ def show_current_page():
         # ページに応じたコンテンツを表示
         if st.session_state.page == "chatbot":
             show_chatbot_page()
+        elif st.session_state.page == "qa_drill":
+            show_qa_drill_page()
         elif st.session_state.page == "home":
             show_home_page()
 

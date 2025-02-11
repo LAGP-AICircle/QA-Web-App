@@ -13,6 +13,7 @@ def show_sidebar():
             items=[
                 sac.MenuItem("Home", icon="house-fill", description="ダッシュボード"),
                 sac.MenuItem("Chatbot", icon="chat-fill", description="チャットボット"),
+                sac.MenuItem("QA Drill", icon="journal-check", description="QAドリル"),
             ],
             format_func="title",
             open_all=True,
@@ -22,7 +23,7 @@ def show_sidebar():
 
         # ページ遷移の処理
         if selected:
-            page_mapping = {"Home": "home", "Chatbot": "chatbot"}
+            page_mapping = {"Home": "home", "Chatbot": "chatbot", "QA Drill": "qa_drill"}
             if selected in page_mapping:
                 st.session_state.page = page_mapping[selected]
 
