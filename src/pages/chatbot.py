@@ -14,9 +14,18 @@ def init_openai_client():
     try:
         # 環境変数設定
         os.environ["LANGCHAIN_TRACING_V2"] = "true"
-        os.environ["LANGCHAIN_API_KEY"] = st.secrets["api_keys"]["langsmith"]
+
+        # Streamlit Cloudの場合はst.secretsから、ローカルの場合は.streamlit/secrets.tomlから読み込む
+        try:
+            # Streamlit Cloudの場合
+            os.environ["LANGCHAIN_API_KEY"] = st.secrets.langsmith_api_key
+            os.environ["OPENAI_API_KEY"] = st.secrets.openai_api_key
+        except AttributeError:
+            # ローカル環境の場合
+            os.environ["LANGCHAIN_API_KEY"] = st.secrets["api_keys"]["langsmith"]
+            os.environ["OPENAI_API_KEY"] = st.secrets["api_keys"]["openai"]
+
         os.environ["LANGCHAIN_PROJECT"] = "qa-support-system"
-        os.environ["OPENAI_API_KEY"] = st.secrets["api_keys"]["openai"]
 
         # OpenAIクライアントの初期化
         return wrappers.wrap_openai(openai.Client())
