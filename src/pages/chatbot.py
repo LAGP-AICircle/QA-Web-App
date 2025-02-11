@@ -17,19 +17,43 @@ def init_openai_client():
         os.environ["LANGCHAIN_PROJECT"] = "qa-support-system"
 
         # APIキーの設定
-        if "api_keys" in st.secrets:
+        if "api_keys" in st.secrets and "openai" in st.secrets["api_keys"] and "langsmith" in st.secrets["api_keys"]:
             # ローカル環境の場合（secrets.tomlからの読み込み）
             os.environ["LANGCHAIN_API_KEY"] = st.secrets["api_keys"]["langsmith"]
             os.environ["OPENAI_API_KEY"] = st.secrets["api_keys"]["openai"]
         else:
-            # Streamlit Cloud環境の場合（直接のシークレット設定からの読み込み）
-            os.environ["LANGCHAIN_API_KEY"] = st.secrets["langsmith_api_key"]
+            # Streamlit Cloud環境の場合（環境変数から読み込み）
+            if not st.secrets.get("openai_api_key"):
+                raise ValueError(
+                    "OpenAI APIキーが設定されていません。Streamlit Cloudの設定で'openai_api_key'を追加してください。"
+                )
+            if not st.secrets.get("langsmith_api_key"):
+                raise ValueError(
+                    "Langsmith APIキーが設定されていません。Streamlit Cloudの設定で'langsmith_api_key'を追加してください。"
+                )
+
             os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
+            os.environ["LANGCHAIN_API_KEY"] = st.secrets["langsmith_api_key"]
 
         # OpenAIクライアントの初期化
         return wrappers.wrap_openai(openai.Client())
     except Exception as e:
-        st.error(f"OpenAIクライアントの初期化中にエラーが発生しました: {str(e)}")
+        error_msg = f"""
+        OpenAIクライアントの初期化中にエラーが発生しました: {str(e)}
+        
+        以下を確認してください：
+        1. ローカル環境の場合：
+           - .streamlit/secrets.toml に以下の設定が必要です：
+           [api_keys]
+           openai = "your-openai-api-key"
+           langsmith = "your-langsmith-api-key"
+           
+        2. Streamlit Cloud環境の場合：
+           - Streamlit Cloudの設定で以下の環境変数を追加してください：
+           openai_api_key = "your-openai-api-key"
+           langsmith_api_key = "your-langsmith-api-key"
+        """
+        st.error(error_msg)
         return None
 
 
