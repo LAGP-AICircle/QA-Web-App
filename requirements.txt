@@ -7,3 +7,5 @@ openai
 langsmith
 python-dotenv
 streamlit-antd-components
+supabase==2.13.0
+pandas==2.2.3

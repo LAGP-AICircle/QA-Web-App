@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit_antd_components as sac
 from pages.chatbot import load_system_prompts
+from auth import is_admin
 
 
 def show_sidebar():
@@ -8,13 +9,20 @@ def show_sidebar():
     with st.sidebar:
         st.title("QA Division Support")
 
+        # メニュー項目の準備
+        menu_items = [
+            sac.MenuItem("Home", icon="house-fill", description="ダッシュボード"),
+            sac.MenuItem("Chatbot", icon="chat-fill", description="チャットボット"),
+            sac.MenuItem("QA Drill", icon="journal-check", description="QAドリル"),
+        ]
+
+        # 管理者の場合は管理者ページへのリンクを追加
+        if is_admin(st.session_state.get("logged_in_email", "")):
+            menu_items.append(sac.MenuItem("Admin", icon="gear-fill", description="管理者設定"))
+
         # メニューの実装
         selected = sac.menu(
-            items=[
-                sac.MenuItem("Home", icon="house-fill", description="ダッシュボード"),
-                sac.MenuItem("Chatbot", icon="chat-fill", description="チャットボット"),
-                sac.MenuItem("QA Drill", icon="journal-check", description="QAドリル"),
-            ],
+            items=menu_items,
             format_func="title",
             open_all=True,
             indent=24,
@@ -23,7 +31,7 @@ def show_sidebar():
 
         # ページ遷移の処理
         if selected:
-            page_mapping = {"Home": "home", "Chatbot": "chatbot", "QA Drill": "qa_drill"}
+            page_mapping = {"Home": "home", "Chatbot": "chatbot", "QA Drill": "qa_drill", "Admin": "admin"}
             if selected in page_mapping:
                 st.session_state.page = page_mapping[selected]
 

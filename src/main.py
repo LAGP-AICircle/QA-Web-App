@@ -5,6 +5,7 @@ from components.sidebar import show_sidebar
 from pages.home import show_home_page
 from pages.chatbot import show_chatbot_page
 from pages.qa_drill import show_qa_drill_page
+from pages.admin import show_admin_page
 
 
 def init_session_state():
@@ -51,6 +52,8 @@ def show_current_page():
             show_chatbot_page()
         elif st.session_state.page == "qa_drill":
             show_qa_drill_page()
+        elif st.session_state.page == "admin":
+            show_admin_page()
         elif st.session_state.page == "home":
             show_home_page()
 
